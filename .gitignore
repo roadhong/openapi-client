@@ -50,4 +50,5 @@ Thumbs.db
 .opencode/
 .gemini/
 .claude/
+.agents/
 .agent/
