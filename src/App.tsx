@@ -12,36 +12,20 @@ import { useApiStore } from './store/ApiStore';
 import Header from './components/Header';
 
 const App = () => {
-  console.log('[App] Component rendering');
-
   const store = useApiStore();
-  console.log('[App] Store obtained:', store ? 'yes' : 'no');
 
   const [isStacked, setIsStacked] = useState(false);
   const [isReady, setIsReady] = useState(false);
-  console.log('[App] State initialized');
 
   useEffect(() => {
-    console.log('[App] useEffect triggered');
-
     // Process initial load asynchronously to prevent UI blocking
     const initLoad = async () => {
       try {
-        console.log('[App] Initial load starting');
-        console.log('[App] persistReady:', store.persistReady);
-        console.log('[App] loadUrl:', store.loadUrl);
-
-        Promise.all([store.persistReady, store.loadMetadata()]);
-        console.log('[App] Initial load completed');
-
+        await Promise.all([store.persistReady, store.loadMetadata()]);
         store.ensureSelectedApi();
-        console.log('[App] ensureSelectedApi completed');
-
         // Rendering ready
         setIsReady(true);
-        console.log('[App] Component ready for rendering');
       } catch (error) {
-        console.error('[App] Initial load error:', error);
         setIsReady(true); // Allow rendering even if error occurs
       }
     };
@@ -67,10 +51,6 @@ const App = () => {
   // Show full loading screen only when initial load is not completed
   // Show header during metadata loading to display header's loading UI
   if (!isReady) {
-    console.log('[App] Waiting for initial load, showing loading...', {
-      isReady,
-      isLoadingMetadata: store.isLoadingMetadata,
-    });
     return (
       <div className="flex flex-col bg-slate-100 text-slate-900 h-screen">
         <Header />
@@ -85,8 +65,6 @@ const App = () => {
       </div>
     );
   }
-
-  console.log('[App] Rendering main UI');
 
   return (
     <div

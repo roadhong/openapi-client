@@ -12,9 +12,6 @@ export type ResponseSectionProps = {
 
 const ResponseSection = observer(
   ({ isStacked = false }: ResponseSectionProps) => {
-    console.log('[ResponseSection] Rendering started');
-    const renderStart = performance.now();
-
     const store = useApiStore();
     const selectedPath = store.selectedApi?.path;
     const response = store.response;
@@ -32,47 +29,47 @@ const ResponseSection = observer(
 
     // Load responseStatusOptions asynchronously
     useEffect(() => {
-      console.log('[ResponseSection] useEffect: Loading responseStatusOptions');
+      let cancelled = false;
       const loadOptions = async () => {
-        const start = performance.now();
         await new Promise((resolve) => setTimeout(resolve, 0));
-        const optionsStart = performance.now();
+        if (cancelled) {
+          return;
+        }
         const options = store.responseStatusOptions;
-        console.log(
-          `[ResponseSection] responseStatusOptions getter: ${performance.now() - optionsStart}ms`
-        );
-        setResponseStatusOptions(options);
-        console.log(
-          `[ResponseSection] responseStatusOptions loaded: ${performance.now() - start}ms`
-        );
+        if (!cancelled) {
+          setResponseStatusOptions(options);
+        }
       };
       loadOptions();
+      return () => {
+        cancelled = true;
+      };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedApi?.key]);
 
     // Load responseSchema asynchronously to prevent main thread blocking
     // Don't use responseSchema getter, call method directly for async processing
     useEffect(() => {
-      console.log('[ResponseSection] useEffect: Loading responseSchema');
+      let cancelled = false;
       const loadSchema = async () => {
-        const start = performance.now();
         // Defer to next event loop to allow initial rendering to complete first
         await new Promise((resolve) => setTimeout(resolve, 0));
+        if (cancelled) {
+          return;
+        }
 
         // Call getResponseSchemaForStatus directly instead of responseSchema getter
         // This ensures schema resolution only runs when needed
         const status = response.status ? String(response.status) : undefined;
-        const schemaStart = performance.now();
         const schema = status ? store.getResponseSchemaForStatus(status) : null;
-        console.log(
-          `[ResponseSection] getResponseSchemaForStatus: ${performance.now() - schemaStart}ms`
-        );
-        setResponseSchema(schema ?? null);
-        console.log(
-          `[ResponseSection] responseSchema loaded: ${performance.now() - start}ms`
-        );
+        if (!cancelled) {
+          setResponseSchema(schema ?? null);
+        }
       };
       loadSchema();
+      return () => {
+        cancelled = true;
+      };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [store.selectedKey, store.response.status, response.status]);
 
@@ -90,12 +87,7 @@ const ResponseSection = observer(
     }, [response.status, responseStatusOptions]);
 
     const contentTypes = useMemo(() => {
-      const start = performance.now();
-      const result = store.getResponseContentTypesForStatus(selectedStatus);
-      console.log(
-        `[ResponseSection] useMemo contentTypes: ${performance.now() - start}ms`
-      );
-      return result;
+      return store.getResponseContentTypesForStatus(selectedStatus);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedApi?.key, selectedStatus]);
 
@@ -109,85 +101,56 @@ const ResponseSection = observer(
 
     // Process schema resolution asynchronously to prevent main thread blocking
     useEffect(() => {
-      console.log('[ResponseSection] useEffect: Loading schemaForStatus');
+      let cancelled = false;
       const loadSchema = async () => {
-        const start = performance.now();
         await new Promise((resolve) => setTimeout(resolve, 0));
+        if (cancelled) {
+          return;
+        }
         let result: Record<string, unknown> | null = null;
         if (selectedContentType) {
-          const methodStart = performance.now();
           result = store.getResponseSchemaForStatusAndContentType(
             selectedStatus,
             selectedContentType
           ) ?? null;
-          console.log(
-            `[ResponseSection] getResponseSchemaForStatusAndContentType: ${performance.now() - methodStart}ms`
-          );
         } else {
-          const methodStart = performance.now();
           result = selectedStatus
             ? (store.getResponseSchemaForStatus(selectedStatus) ?? null)
             : responseSchema;
-          console.log(
-            `[ResponseSection] getResponseSchemaForStatus: ${performance.now() - methodStart}ms`
-          );
         }
-        setSchemaForStatus(result);
-        console.log(
-          `[ResponseSection] schemaForStatus loaded: ${performance.now() - start}ms`
-        );
+        if (!cancelled) {
+          setSchemaForStatus(result);
+        }
       };
       loadSchema();
+      return () => {
+        cancelled = true;
+      };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedApi?.key, responseSchema, selectedStatus, selectedContentType]);
 
     const responseExamples = useMemo(() => {
-      const start = performance.now();
-      const result = store.getResponseExamplesForStatus(
+      return store.getResponseExamplesForStatus(
         selectedStatus,
         selectedContentType ?? ''
       );
-      console.log(
-        `[ResponseSection] useMemo responseExamples: ${performance.now() - start}ms`
-      );
-      return result;
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedApi?.key, selectedStatus, selectedContentType]);
     const responseInfo = useMemo(() => {
-      const start = performance.now();
-      const result = store.getResponseInfoForStatus(selectedStatus);
-      console.log(
-        `[ResponseSection] useMemo responseInfo: ${performance.now() - start}ms`
-      );
-      return result;
+      return store.getResponseInfoForStatus(selectedStatus);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedApi?.key, selectedStatus]);
     const historyItems = useMemo(() => {
-      const start = performance.now();
       if (!store.responseHistory.length) {
-        console.log(
-          `[ResponseSection] useMemo historyItems: ${performance.now() - start}ms`
-        );
         return [];
       }
       if (selectedPath) {
-        const result = store.responseHistory.filter(
+        return store.responseHistory.filter(
           (item) => item.path === selectedPath
         );
-        console.log(
-          `[ResponseSection] useMemo historyItems: ${performance.now() - start}ms`
-        );
-        return result;
       }
-      console.log(
-        `[ResponseSection] useMemo historyItems: ${performance.now() - start}ms`
-      );
       return store.responseHistory;
     }, [store.responseHistory, selectedPath]);
-
-    console.log(
-      `[ResponseSection] Rendering completed: ${performance.now() - renderStart}ms`
-    );
 
     return (
       <section

@@ -953,9 +953,7 @@ export class ApiStore {
           }
         }
       })
-      .catch((error) => {
-        console.error('[SwaggerStore] Persist error:', error);
-      });
+      .catch(() => {});
   }
 
   // ========================================================================
@@ -1012,8 +1010,7 @@ export class ApiStore {
       });
 
       return items;
-    } catch (error) {
-      console.error('[SwaggerStore] Error computing apiList:', error);
+    } catch {
       return [];
     }
   }
@@ -1421,7 +1418,6 @@ export class ApiStore {
   //   try {
   //     return this.resolveSchema(schema);
   //   } catch (error) {
-  //     console.error("[SwaggerStore] Error resolving response schema:", error);
   //     return schema;
   //   }
   // }
@@ -1480,30 +1476,16 @@ export class ApiStore {
   }
 
   getResponseSchemaForStatus(status?: string): Record<string, unknown> | null | undefined {
-    const start = performance.now();
-    console.log(
-      `[SwaggerStore] getResponseSchemaForStatus started (status: ${status})`
-    );
     const schema = getResponseSchema(this.metadata, this.selectedApi, status);
     if (!schema) {
-      console.log(
-        `[SwaggerStore] getResponseSchemaForStatus completed (no schema): ${performance.now() - start}ms`
-      );
       return null;
     }
     try {
       // Process schema resolution in small chunks for async processing
       // But here we process synchronously, and the caller handles async processing
       const result = this.resolveSchema(schema);
-      console.log(
-        `[SwaggerStore] getResponseSchemaForStatus completed: ${performance.now() - start}ms`
-      );
       return result;
-    } catch (error) {
-      console.error('[SwaggerStore] Error resolving schema for status:', error);
-      console.log(
-        `[SwaggerStore] getResponseSchemaForStatus completed (error): ${performance.now() - start}ms`
-      );
+    } catch {
       return schema;
     }
   }
@@ -1520,36 +1502,20 @@ export class ApiStore {
     status: string | undefined,
     contentType: string | undefined
   ): Record<string, unknown> | null | undefined {
-    const start = performance.now();
-    console.log(
-      `[SwaggerStore] getResponseSchemaForStatusAndContentType started (status: ${status}, contentType: ${contentType})`
-    );
     if (!contentType) {
       const result = this.getResponseSchemaForStatus(status);
-      console.log(
-        `[SwaggerStore] getResponseSchemaForStatusAndContentType completed (no contentType): ${performance.now() - start}ms`
-      );
       return result;
     }
     const content = getResponseContent(this.metadata, this.selectedApi, status);
     if (!content) {
-      console.log(
-        `[SwaggerStore] getResponseSchemaForStatusAndContentType completed (no content): ${performance.now() - start}ms`
-      );
       return null;
     }
     const contentTypeObj = contentType && isRecord(content[contentType]) ? content[contentType] : null;
     if (!contentTypeObj) {
-      console.log(
-        `[SwaggerStore] getResponseSchemaForStatusAndContentType completed (no contentType): ${performance.now() - start}ms`
-      );
       return null;
     }
     const schema = isRecord(contentTypeObj.schema) ? contentTypeObj.schema : null;
     if (!schema) {
-      console.log(
-        `[SwaggerStore] getResponseSchemaForStatusAndContentType completed (no schema): ${performance.now() - start}ms`
-      );
       return null;
     }
     try {
@@ -1561,18 +1527,8 @@ export class ApiStore {
       } else {
         result = this.resolveSchema(schema);
       }
-      console.log(
-        `[SwaggerStore] getResponseSchemaForStatusAndContentType completed: ${performance.now() - start}ms`
-      );
       return result;
-    } catch (error) {
-      console.error(
-        '[SwaggerStore] Error resolving schema for status and content type:',
-        error
-      );
-      console.log(
-        `[SwaggerStore] getResponseSchemaForStatusAndContentType completed (error): ${performance.now() - start}ms`
-      );
+    } catch {
       return schema;
     }
   }
@@ -2178,9 +2134,6 @@ export class ApiStore {
 
       const normalized = { spec: parsed };
 
-      // 성능 측정
-      const perfStart = performance.now();
-
       // 다이얼로그는 즉시 닫기
       runInAction(() => {
         this.sourceDialogOpen = false;
@@ -2241,20 +2194,10 @@ export class ApiStore {
           this.ensureSelectedApi();
         });
 
-        // apiList 계산을 다음 이벤트 루프로 미뤄서 UI 블로킹 방지
-        setTimeout(() => {
-          console.log(
-            `[Performance] apiList computed, ${this.apiList.length} items`
-          );
-
-          // 성능 로깅
-          const perfEnd = performance.now();
-          console.log(
-            `[Performance] Add source processing took ${(perfEnd - perfStart).toFixed(2)}ms`
-          );
-
-          toastStore.show('Source added successfully.', 'success');
-        }, 0);
+      // apiList 계산을 다음 이벤트 루프로 미뤄서 UI 블로킹 방지
+      setTimeout(() => {
+        toastStore.show('Source added successfully.', 'success');
+      }, 0);
       }, 0);
     } catch (error: unknown) {
       // 취소된 경우는 에러 메시지 표시하지 않음
