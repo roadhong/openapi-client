@@ -44,3 +44,10 @@ coverage
 
 # OS files
 Thumbs.db
+
+# Symlink directories (actual files are in .agents/)
+.cursor/
+.opencode/
+.gemini/
+.claude/
+.agent/
