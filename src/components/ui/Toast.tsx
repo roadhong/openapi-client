@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { toastStore } from '../../store/ToastStore';
+import { toastStore } from '../../store/toast/ToastStore';
 
 const Toast = observer(() => {
   if (toastStore.toasts.length === 0) {

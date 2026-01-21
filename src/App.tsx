@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import Split from 'react-split';
-import ApiListSection from './components/section/ApiListSection';
-import HeaderDialog from './components/dialog/HeaderDialog';
-import GlobalAuthorizeDialog from './components/dialog/GlobalAuthorizeDialog';
-import ServersDialog from './components/dialog/ServersDialog';
-import SourceDialog from './components/dialog/SourceDialog';
-import InfoDialog from './components/dialog/InfoDialog';
-import RequestSection from './components/section/RequestSection';
-import ResponseSection from './components/section/ResponseSection';
-import { useApiStore } from './store/ApiStore';
-import Header from './components/Header';
+import ApiListSection from './components/sections/ApiListSection';
+import HeaderDialog from './components/dialogs/HeaderDialog';
+import GlobalAuthorizeDialog from './components/dialogs/GlobalAuthorizeDialog';
+import ServersDialog from './components/dialogs/ServersDialog';
+import SourceDialog from './components/dialogs/SourceDialog';
+import InfoDialog from './components/dialogs/InfoDialog';
+import RequestSection from './components/sections/RequestSection';
+import ResponseSection from './components/sections/ResponseSection';
+import { useApiStore } from './store/api/ApiStoreContext';
+import Header from './components/layout/Header';
 
 const App = () => {
   const store = useApiStore();

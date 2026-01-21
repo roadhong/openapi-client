@@ -1,9 +1,45 @@
+import { useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
-import { useApiStore } from '../store/ApiStore';
+import { useApiStore } from '../../store/api/ApiStoreContext';
 
-const Header = observer(() => {
-  const store = useApiStore();
-  return (
+type SavedSourceEntry = {
+  type: string;
+};
+
+type HeaderViewProps = {
+  selectedSourceKey: string;
+  savedSources: Record<string, SavedSourceEntry>;
+  isLoadingMetadata: boolean;
+  activeServerUrl: string | null;
+  darkMode: boolean;
+  onOpenInfo: () => void;
+  onOpenSource: () => void;
+  onRemoveSource: () => void;
+  onSelectSource: (key: string) => void;
+  onCancelLoad: () => void;
+  onOpenServers: () => void;
+  onOpenAuthorize: () => void;
+  onOpenGlobalHeader: () => void;
+  onToggleDarkMode: () => void;
+};
+
+const HeaderView = observer(
+  ({
+    selectedSourceKey,
+    savedSources,
+    isLoadingMetadata,
+    activeServerUrl,
+    darkMode,
+    onOpenInfo,
+    onOpenSource,
+    onRemoveSource,
+    onSelectSource,
+    onCancelLoad,
+    onOpenServers,
+    onOpenAuthorize,
+    onOpenGlobalHeader,
+    onToggleDarkMode,
+  }: HeaderViewProps) => (
     <header className="border-b border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
       <div className="flex flex-wrap items-center gap-3 px-5 py-3">
         <div className="flex flex-1 items-center gap-3 min-w-[16rem]">
@@ -13,7 +49,7 @@ const Header = observer(() => {
           <button
             type="button"
             className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
-            onClick={() => store.setInfoDialogOpen(true)}
+            onClick={onOpenInfo}
           >
             <svg
               className="h-4 w-4"
@@ -34,7 +70,7 @@ const Header = observer(() => {
             <button
               type="button"
               className="rounded-md bg-slate-800 dark:bg-slate-700 px-3 py-1 text-sm font-semibold text-white hover:bg-slate-900 dark:hover:bg-slate-600 flex items-center gap-2"
-              onClick={() => store.setSourceDialogOpen(true)}
+              onClick={onOpenSource}
             >
               <svg
                 className="h-4 w-4"
@@ -54,8 +90,8 @@ const Header = observer(() => {
             <button
               type="button"
               className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={() => store.removeSavedSource(store.selectedSourceKey)}
-              disabled={!store.selectedSourceKey}
+              onClick={onRemoveSource}
+              disabled={!selectedSourceKey}
             >
               <svg
                 className="h-4 w-4"
@@ -74,11 +110,11 @@ const Header = observer(() => {
             </button>
             <select
               className="rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1 text-sm text-slate-700 dark:text-slate-200"
-              value={store.selectedSourceKey}
-              onChange={(event) => store.loadSavedSource(event.target.value)}
+              value={selectedSourceKey}
+              onChange={(event) => onSelectSource(event.target.value)}
             >
               <option value="">Saved sources</option>
-              {Object.entries(store.savedSources).map(([key, entry]) => (
+              {Object.entries(savedSources).map(([key, entry]) => (
                 <option key={key} value={key}>
                   {key} ({entry.type})
                 </option>
@@ -86,7 +122,7 @@ const Header = observer(() => {
             </select>
             <span className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
               openapi json
-              {store.isLoadingMetadata && (
+              {isLoadingMetadata && (
                 <>
                   <svg
                     className="h-3 w-3 animate-spin text-slate-500 dark:text-slate-400"
@@ -110,7 +146,7 @@ const Header = observer(() => {
                   <button
                     type="button"
                     className="rounded-md border border-slate-300 dark:border-slate-600 px-2 py-0.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
-                    onClick={() => store.cancelLoadMetadata()}
+                    onClick={onCancelLoad}
                     title="Cancel loading"
                   >
                     Cancel
@@ -121,15 +157,15 @@ const Header = observer(() => {
           </div>
         </div>
         <div className="flex w-full flex-wrap items-center gap-3 xl:w-auto xl:ml-auto">
-          {store.activeServerUrl ? (
+          {activeServerUrl ? (
             <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-              Active: {store.activeServerUrl}
+              Active: {activeServerUrl}
             </span>
           ) : null}
           <button
             type="button"
             className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
-            onClick={() => store.setServerDialogOpen(true)}
+            onClick={onOpenServers}
           >
             <svg
               className="h-4 w-4"
@@ -149,7 +185,7 @@ const Header = observer(() => {
           <button
             type="button"
             className="rounded-md bg-emerald-600 px-3 py-1 text-sm font-semibold text-white hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600 flex items-center gap-2"
-            onClick={() => store.setGlobalAuthDialogOpen(true)}
+            onClick={onOpenAuthorize}
           >
             <svg
               className="h-4 w-4"
@@ -169,7 +205,7 @@ const Header = observer(() => {
           <button
             type="button"
             className="rounded-md bg-blue-600 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 flex items-center gap-2"
-            onClick={() => store.setHeaderDialogOpen(true)}
+            onClick={onOpenGlobalHeader}
           >
             <svg
               className="h-4 w-4"
@@ -189,12 +225,10 @@ const Header = observer(() => {
           <button
             type="button"
             className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
-            onClick={() => store.toggleDarkMode()}
-            title={
-              store.darkMode ? 'Switch to light mode' : 'Switch to dark mode'
-            }
+            onClick={onToggleDarkMode}
+            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
           >
-            {store.darkMode ? (
+            {darkMode ? (
               <>
                 <svg
                   className="h-4 w-4"
@@ -233,6 +267,66 @@ const Header = observer(() => {
         </div>
       </div>
     </header>
+  )
+);
+
+const Header = observer(() => {
+  const store = useApiStore();
+
+  const handleOpenInfo = useCallback(
+    () => store.setInfoDialogOpen(true),
+    [store]
+  );
+  const handleOpenSource = useCallback(
+    () => store.setSourceDialogOpen(true),
+    [store]
+  );
+  const handleRemoveSource = useCallback(
+    () => store.removeSavedSource(store.selectedSourceKey),
+    [store]
+  );
+  const handleSelectSource = useCallback(
+    (key: string) => store.loadSavedSource(key),
+    [store]
+  );
+  const handleCancelLoad = useCallback(
+    () => store.cancelLoadMetadata(),
+    [store]
+  );
+  const handleOpenServers = useCallback(
+    () => store.setServerDialogOpen(true),
+    [store]
+  );
+  const handleOpenAuthorize = useCallback(
+    () => store.setGlobalAuthDialogOpen(true),
+    [store]
+  );
+  const handleOpenGlobalHeader = useCallback(
+    () => store.setHeaderDialogOpen(true),
+    [store]
+  );
+  const handleToggleDarkMode = useCallback(
+    () => store.toggleDarkMode(),
+    [store]
+  );
+
+  return (
+    <HeaderView
+      selectedSourceKey={store.selectedSourceKey}
+      savedSources={store.savedSources}
+      isLoadingMetadata={store.isLoadingMetadata}
+      activeServerUrl={store.activeServerUrl ?? null}
+      darkMode={store.darkMode}
+      onOpenInfo={handleOpenInfo}
+      onOpenSource={handleOpenSource}
+      onRemoveSource={handleRemoveSource}
+      onSelectSource={handleSelectSource}
+      onCancelLoad={handleCancelLoad}
+      onOpenServers={handleOpenServers}
+      onOpenAuthorize={handleOpenAuthorize}
+      onOpenGlobalHeader={handleOpenGlobalHeader}
+      onToggleDarkMode={handleToggleDarkMode}
+    />
   );
 });
 

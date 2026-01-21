@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import CodeMirror from '@uiw/react-codemirror';
 import { json5 } from 'codemirror-json5';
 import { githubLight, githubDark } from '@uiw/codemirror-theme-github';
-import SchemaViewer from '../others/SchemaViewer';
-import { useApiStore } from '../../store/ApiStore';
+import SchemaViewer from '../ui/SchemaViewer';
+import { useApiStore } from '../../store/api/ApiStoreContext';
 
 export type ResponseSectionProps = {
   isStacked?: boolean;
@@ -152,6 +152,26 @@ const ResponseSection = observer(
       return store.responseHistory;
     }, [store.responseHistory, selectedPath]);
 
+    const handleSelectHistory = useCallback(
+      (value: string) => store.selectResponseHistory(value),
+      [store]
+    );
+
+    const handleTabChange = useCallback(
+      (tab: 'response' | 'schema') => setActiveTab(tab),
+      []
+    );
+
+    const handleStatusChange = useCallback(
+      (status: string) => setSelectedStatus(status),
+      []
+    );
+
+    const handleContentTypeChange = useCallback(
+      (contentType: string) => setSelectedContentType(contentType),
+      []
+    );
+
     return (
       <section
         className={`flex flex-col rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm ${isStacked ? '' : 'min-h-0'}`}
@@ -165,7 +185,7 @@ const ResponseSection = observer(
             <select
               className="w-48 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2 py-1 text-xs text-slate-700 dark:text-slate-200 disabled:bg-slate-50 dark:disabled:bg-slate-800"
               onChange={(event) =>
-                store.selectResponseHistory(event.target.value)
+                handleSelectHistory(event.target.value)
               }
               defaultValue=""
               disabled={historyItems.length === 0}
@@ -186,14 +206,14 @@ const ResponseSection = observer(
           <button
             type="button"
             className={`rounded-full px-3 py-1 ${activeTab === 'response' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-slate-200'}`}
-            onClick={() => setActiveTab('response')}
+            onClick={() => handleTabChange('response')}
           >
             Response
           </button>
           <button
             type="button"
             className={`rounded-full px-3 py-1 ${activeTab === 'schema' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-slate-200'}`}
-            onClick={() => setActiveTab('schema')}
+            onClick={() => handleTabChange('schema')}
           >
             Schema
           </button>
@@ -210,7 +230,7 @@ const ResponseSection = observer(
                       ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
                       : 'text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-slate-200'
                   }`}
-                  onClick={() => setSelectedStatus(status)}
+                  onClick={() => handleStatusChange(status)}
                 >
                   {status.toUpperCase()}
                 </button>
@@ -227,7 +247,7 @@ const ResponseSection = observer(
                         ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
                         : 'text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-slate-200'
                     }`}
-                    onClick={() => setSelectedContentType(type)}
+                    onClick={() => handleContentTypeChange(type)}
                   >
                     {type}
                   </button>

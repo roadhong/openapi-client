@@ -1,10 +1,9 @@
 import axios, { AxiosInstance } from 'axios';
 import { makeAutoObservable, runInAction } from 'mobx';
 import { makePersistable } from 'mobx-persist-store';
-import { createContext, useContext } from 'react';
 import JSON5 from 'json5';
 import YAML from 'yaml';
-import { toastStore } from './ToastStore';
+import { toastStore } from '../toast/ToastStore';
 import type {
   ApiListItem,
   HeaderMappingRule,
@@ -14,7 +13,7 @@ import type {
   OpenAPIRequestBody,
   ResponseHistoryItem,
   ApiMetadataResponse,
-} from '../types';
+} from '../../types';
 
 // ============================================================================
 // 타입 가드 헬퍼
@@ -3038,16 +3037,4 @@ export class ApiStore {
   }
 }
 
-const ApiStoreContext = createContext<ApiStore | null>(null);
-
 export const apiStore = new ApiStore();
-
-export const ApiStoreProvider = ApiStoreContext.Provider;
-
-export const useApiStore = () => {
-  const store = useContext(ApiStoreContext);
-  if (!store) {
-    throw new Error('SwaggerStoreProvider is missing.');
-  }
-  return store;
-};

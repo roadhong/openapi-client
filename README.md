@@ -111,15 +111,28 @@ pnpm preview
 openapi-client/
 ├── src/
 │   ├── components/          # React components
-│   │   ├── ApiListSection.tsx
-│   │   ├── RequestSection.tsx
-│   │   ├── ResponseSection.tsx
-│   │   ├── Header.tsx
-│   │   ├── SchemaViewer.tsx
+│   │   ├── dialogs/
+│   │   │   ├── HeaderDialog.tsx
+│   │   │   ├── GlobalAuthorizeDialog.tsx
+│   │   │   ├── ServersDialog.tsx
+│   │   │   ├── SourceDialog.tsx
+│   │   │   └── InfoDialog.tsx
+│   │   ├── sections/
+│   │   │   ├── ApiListSection.tsx
+│   │   │   ├── RequestSection.tsx
+│   │   │   └── ResponseSection.tsx
+│   │   ├── layout/
+│   │   │   └── Header.tsx
+│   │   ├── ui/
+│   │   │   ├── MethodBadge.tsx
+│   │   │   ├── SchemaViewer.tsx
+│   │   │   └── Toast.tsx
 │   │   └── ...
 │   ├── store/               # MobX stores
-│   │   ├── ApiStore.ts
-│   │   └── ToastStore.ts
+│   │   ├── api/
+│   │   │   └── ApiStore.ts
+│   │   └── toast/
+│   │       └── ToastStore.ts
 │   ├── types.ts             # TypeScript type definitions
 │   ├── App.tsx              # Main app component
 │   └── main.tsx             # Entry point

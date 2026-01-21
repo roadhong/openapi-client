@@ -1,15 +1,62 @@
-import { useMemo, useState, type ChangeEvent } from 'react';
+import { useCallback, useMemo, useState, type ChangeEvent } from 'react';
 import { observer } from 'mobx-react-lite';
 import CodeMirror from '@uiw/react-codemirror';
 import { json5 } from 'codemirror-json5';
 import { githubLight, githubDark } from '@uiw/codemirror-theme-github';
 import JSON5 from 'json5';
-import MethodBadge from '../others/MethodBadge';
-import SchemaViewer from '../others/SchemaViewer';
-import { useApiStore } from '../../store/ApiStore';
+import MethodBadge from '../ui/MethodBadge';
+import SchemaViewer from '../ui/SchemaViewer';
+import { useApiStore } from '../../store/api/ApiStoreContext';
 
 type RequestSectionProps = {
   isStacked?: boolean;
+};
+
+const buildParamOptions = (schemaValue: Record<string, unknown>) => {
+  const options: string[] = [];
+  let example: string | undefined;
+  if (schemaValue?.format) {
+    options.push(`format=${schemaValue.format}`);
+  }
+  if (Array.isArray(schemaValue?.enum) && schemaValue.enum.length > 0) {
+    options.push(`enum=${schemaValue.enum.map(String).join(', ')}`);
+  }
+  if (schemaValue?.minimum !== undefined) {
+    options.push(`min=${schemaValue.minimum}`);
+  }
+  if (schemaValue?.maximum !== undefined) {
+    options.push(`max=${schemaValue.maximum}`);
+  }
+  if (schemaValue?.minLength !== undefined) {
+    options.push(`minLength=${schemaValue.minLength}`);
+  }
+  if (schemaValue?.maxLength !== undefined) {
+    options.push(`maxLength=${schemaValue.maxLength}`);
+  }
+  if (schemaValue?.pattern) {
+    options.push(`pattern=${schemaValue.pattern}`);
+  }
+  if (schemaValue?.minItems !== undefined) {
+    options.push(`minItems=${schemaValue.minItems}`);
+  }
+  if (schemaValue?.maxItems !== undefined) {
+    options.push(`maxItems=${schemaValue.maxItems}`);
+  }
+  if (schemaValue?.example !== undefined) {
+    example = String(schemaValue.example);
+  }
+  return { options, example };
+};
+
+const isJsonContentType = (contentType: string | null) => {
+  if (!contentType) {
+    return true;
+  }
+  return (
+    contentType === 'application/json' ||
+    contentType.endsWith('+json') ||
+    contentType.includes('json')
+  );
 };
 
 const RequestSection = observer(
@@ -23,11 +70,15 @@ const RequestSection = observer(
     const requestSchema = store.requestSchema;
     const requestContentType = store.requestContentType;
     const requestContentTypeOptions = store.requestContentTypeOptions;
-    const requestBodiesByContentType = Object.fromEntries(
-      store.requestContentTypeOptions.map((type) => [
-        type,
-        store.getRequestBodyForContentType(type),
-      ])
+    const requestBodiesByContentType = useMemo(
+      () =>
+        Object.fromEntries(
+          requestContentTypeOptions.map((type) => [
+            type,
+            store.getRequestBodyForContentType(type),
+          ])
+        ),
+      [store, requestContentTypeOptions]
     );
     const requestParameters = store.requestParameters;
     const requestCallbacks = store.requestCallbacks;
@@ -37,41 +88,6 @@ const RequestSection = observer(
       store.selectedSecurityRequirementIndex;
     const securityValues = store.securityValues;
     const [activeTab, setActiveTab] = useState<'request' | 'schema'>('request');
-    const buildParamOptions = (schemaValue: Record<string, unknown>) => {
-      const options: string[] = [];
-      let example: string | undefined;
-      if (schemaValue?.format) {
-        options.push(`format=${schemaValue.format}`);
-      }
-      if (Array.isArray(schemaValue?.enum) && schemaValue.enum.length > 0) {
-        options.push(`enum=${schemaValue.enum.map(String).join(', ')}`);
-      }
-      if (schemaValue?.minimum !== undefined) {
-        options.push(`min=${schemaValue.minimum}`);
-      }
-      if (schemaValue?.maximum !== undefined) {
-        options.push(`max=${schemaValue.maximum}`);
-      }
-      if (schemaValue?.minLength !== undefined) {
-        options.push(`minLength=${schemaValue.minLength}`);
-      }
-      if (schemaValue?.maxLength !== undefined) {
-        options.push(`maxLength=${schemaValue.maxLength}`);
-      }
-      if (schemaValue?.pattern) {
-        options.push(`pattern=${schemaValue.pattern}`);
-      }
-      if (schemaValue?.minItems !== undefined) {
-        options.push(`minItems=${schemaValue.minItems}`);
-      }
-      if (schemaValue?.maxItems !== undefined) {
-        options.push(`maxItems=${schemaValue.maxItems}`);
-      }
-      if (schemaValue?.example !== undefined) {
-        example = String(schemaValue.example);
-      }
-      return { options, example };
-    };
 
     const paramMeta = useMemo(() => {
       return requestParameters.reduce<
@@ -113,18 +129,7 @@ const RequestSection = observer(
       [requestCallbacks]
     );
 
-    const isJsonContentType = (contentType: string | null) => {
-      if (!contentType) {
-        return true;
-      }
-      return (
-        contentType === 'application/json' ||
-        contentType.endsWith('+json') ||
-        contentType.includes('json')
-      );
-    };
-
-    const handleSend = () => {
+    const handleSend = useCallback(() => {
       if (requestBody.trim() && isJsonContentType(requestContentType)) {
         try {
           const parsed = JSON5.parse(requestBody);
@@ -137,7 +142,7 @@ const RequestSection = observer(
         }
       }
       store.sendRequest();
-    };
+    }, [requestBody, requestContentType, store]);
 
     return (
       <section

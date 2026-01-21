@@ -1,12 +1,14 @@
 import { observer } from 'mobx-react-lite';
-import { useApiStore } from '../../store/ApiStore';
+import { useApiStore } from '../../store/api/ApiStoreContext';
 import { getInfo } from '../../types';
 
-const InfoDialog = observer(() => {
-  const store = useApiStore();
-  const open = store.infoDialogOpen;
-  const info = store.metadata?.spec ? getInfo(store.metadata.spec) : undefined;
+type InfoDialogViewProps = {
+  open: boolean;
+  info: ReturnType<typeof getInfo> | undefined;
+  onClose: () => void;
+};
 
+const InfoDialogView = observer(({ open, info, onClose }: InfoDialogViewProps) => {
   if (!open) {
     return null;
   }
@@ -14,7 +16,7 @@ const InfoDialog = observer(() => {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={() => store.setInfoDialogOpen(false)}
+      onClick={onClose}
     >
       <div
         className="w-full max-w-2xl rounded-xl bg-white dark:bg-slate-800 shadow-xl"
@@ -142,7 +144,7 @@ const InfoDialog = observer(() => {
             <button
               type="button"
               className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
-              onClick={() => store.setInfoDialogOpen(false)}
+              onClick={onClose}
             >
               Close
             </button>
@@ -150,6 +152,19 @@ const InfoDialog = observer(() => {
         </div>
       </div>
     </div>
+  );
+});
+
+const InfoDialog = observer(() => {
+  const store = useApiStore();
+  const info = store.metadata?.spec ? getInfo(store.metadata.spec) : undefined;
+
+  return (
+    <InfoDialogView
+      open={store.infoDialogOpen}
+      info={info}
+      onClose={() => store.setInfoDialogOpen(false)}
+    />
   );
 });
 
