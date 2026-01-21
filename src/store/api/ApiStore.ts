@@ -1,6 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { makeAutoObservable, runInAction } from 'mobx';
-import { makePersistable } from 'mobx-persist-store';
+import { makeAutoObservable, reaction, runInAction } from 'mobx';
 import JSON5 from 'json5';
 import YAML from 'yaml';
 import { toastStore } from '../toast/ToastStore';
@@ -14,6 +13,14 @@ import type {
   ResponseHistoryItem,
   ApiMetadataResponse,
 } from '../../types';
+import {
+  deleteSource,
+  loadMeta,
+  loadSource,
+  saveMeta,
+  saveSource,
+  type MetaState,
+} from './persistence';
 
 // ============================================================================
 // 타입 가드 헬퍼
@@ -62,6 +69,39 @@ type ServerVariableInfo = {
   defaultValue?: string;
   description?: string;
   enum?: string[];
+};
+
+type SourceSnapshot = {
+  metadata: ApiMetadataResponse | null;
+  selectedKey: string;
+  openControllers: Record<string, boolean>;
+  currentSpecKey: string;
+  pathParams: Record<string, string>;
+  queryParams: Record<string, string>;
+  headerParams: Record<string, string>;
+  requestBody: string;
+  requestContentTypeSelections: Record<string, string>;
+  requestBodiesByContentType: Record<string, Record<string, string>>;
+  response: HttpResponse;
+  responseHistory: ResponseHistoryItem[];
+  responseHistoryBySpec: Record<string, ResponseHistoryItem[]>;
+  headerDraft: Record<string, string>;
+  headerMappingDraft: HeaderMappingRule[];
+  headerVariables: Record<string, string>;
+  serverDraft: Array<{ url: string; description?: string }>;
+  metadataServerVariables: Record<string, Record<string, string>>;
+  activeServerKey: string;
+  activeServerUrl: string;
+  loadUrl: string;
+  loadedFromPaste: boolean;
+  metadataDraft: string;
+  sourceDraftKey: string;
+  sourceDraftType: 'url' | 'text';
+  sourceDraftValue: string;
+  globalSecurityValues: Record<string, Record<string, unknown>>;
+  globalSecurityScopes: Record<string, string[]>;
+  securityValues: Record<string, Record<string, unknown>>;
+  securityRequirementIndex: Record<string, number>;
 };
 
 // ============================================================================
@@ -232,25 +272,6 @@ const applyPathParams = (path: string, params: Record<string, string>) => {
 // 스토리지 헬퍼
 // ============================================================================
 
-const createMemoryStorage = () => {
-  const storage = new Map<string, string>();
-  return {
-    getItem: (key: string) => storage.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      storage.set(key, value);
-    },
-    removeItem: (key: string) => {
-      storage.delete(key);
-    },
-  };
-};
-
-const getPersistStorage = () => {
-  if (typeof window !== 'undefined' && window.localStorage) {
-    return window.localStorage;
-  }
-  return createMemoryStorage();
-};
 
 // ============================================================================
 // 경로 및 템플릿 헬퍼
@@ -883,6 +904,43 @@ export class ApiStore {
   persistReady: Promise<void>;
   private axiosInstance: AxiosInstance;
   private loadAbortController: AbortController | null = null;
+  private pendingSourceDeletions = new Set<string>();
+  private isHydrated = false;
+
+  private resetSourceState(): void {
+    this.metadata = null;
+    this.selectedKey = '';
+    this.currentSpecKey = '';
+    this.openControllers = {};
+    this.pathParams = {};
+    this.queryParams = {};
+    this.headerParams = {};
+    this.requestBody = '';
+    this.requestContentTypeSelections = {};
+    this.requestBodiesByContentType = {};
+    this.response = {};
+    this.responseHistory = [];
+    this.responseHistoryBySpec = {};
+    this.headerDraft = {};
+    this.headerMappingDraft = [];
+    this.headerVariables = {};
+    this.serverDraft = getDefaultServerDraft();
+    this.metadataServerVariables = {};
+    this.activeServerKey = '';
+    this.activeServerUrl = getDefaultServerUrl();
+    this.loadUrl = getOpenapiUrl();
+    this.loadedFromPaste = false;
+    this.metadataDraft = '';
+    this.sourceDraftKey = '';
+    this.sourceDraftType = 'url';
+    this.sourceDraftValue = '';
+    this.globalSecurityValues = {};
+    this.globalSecurityScopes = {};
+    this.securityValues = {};
+    this.securityRequirementIndex = {};
+    this.setActiveServerUrl(this.activeServerUrl);
+    this.setGlobalHeaders(this.buildHeadersFromDraft(this.headerDraft));
+  }
 
   constructor() {
     // Axios 인스턴스 초기화
@@ -900,59 +958,191 @@ export class ApiStore {
     );
 
     // 영속화할 속성 목록
-    const persistProperties = [
-      'selectedKey',
-      'openControllers',
-      'pathParams',
-      'queryParams',
-      'headerParams',
-      'requestBody',
-      'response',
-      'responseHistory',
-      'responseHistoryBySpec',
-      'currentSpecKey',
-      'headerDraft',
-      'headerMappingDraft',
-      'headerVariables',
-      'serverDraft',
-      'metadataServerVariables',
-      'metadataDraft',
-      'loadedFromPaste',
-      'savedSources',
-      'selectedSourceKey',
-      'sourceDraftKey',
-      'sourceDraftType',
-      'sourceDraftValue',
-      'requestContentTypeSelections',
-      'requestBodiesByContentType',
-      'globalSecurityValues',
-      'globalSecurityScopes',
-      'securityValues',
-      'securityRequirementIndex',
-      'activeServerKey',
-      'activeServerUrl',
-      'loadUrl',
-      'darkMode',
-    ] as Array<keyof ApiStore>;
+    // 영속화: 메타/소스별로 IndexedDB 저장
+    this.persistReady = this.hydrate();
+  }
 
-    // 영속화 설정
-    this.persistReady = makePersistable(this, {
-      name: 'SwaggerStore',
-      properties: persistProperties,
-      storage: getPersistStorage(),
-    })
-      .then(() => {
-        this.setGlobalHeaders(this.buildHeadersFromDraft(this.headerDraft));
-        // Apply dark mode on initialization
-        if (typeof document !== 'undefined') {
-          if (this.darkMode) {
-            document.documentElement.classList.add('dark');
-          } else {
-            document.documentElement.classList.remove('dark');
-          }
+  private buildMetaSnapshot(): MetaState {
+    return {
+      savedSources: this.savedSources,
+      selectedSourceKey: this.selectedSourceKey,
+      darkMode: this.darkMode,
+    };
+  }
+
+  private buildSourceSnapshot(): SourceSnapshot | null {
+    if (!this.selectedSourceKey) {
+      return null;
+    }
+    return {
+      metadata: this.metadata,
+      selectedKey: this.selectedKey,
+      openControllers: this.openControllers,
+      currentSpecKey: this.currentSpecKey,
+      pathParams: this.pathParams,
+      queryParams: this.queryParams,
+      headerParams: this.headerParams,
+      requestBody: this.requestBody,
+      requestContentTypeSelections: this.requestContentTypeSelections,
+      requestBodiesByContentType: this.requestBodiesByContentType,
+      response: this.response,
+      responseHistory: this.responseHistory,
+      responseHistoryBySpec: this.responseHistoryBySpec,
+      headerDraft: this.headerDraft,
+      headerMappingDraft: this.headerMappingDraft,
+      headerVariables: this.headerVariables,
+      serverDraft: this.serverDraft,
+      metadataServerVariables: this.metadataServerVariables,
+      activeServerKey: this.activeServerKey,
+      activeServerUrl: this.activeServerUrl,
+      loadUrl: this.loadUrl,
+      loadedFromPaste: this.loadedFromPaste,
+      metadataDraft: this.metadataDraft,
+      sourceDraftKey: this.sourceDraftKey,
+      sourceDraftType: this.sourceDraftType,
+      sourceDraftValue: this.sourceDraftValue,
+      globalSecurityValues: this.globalSecurityValues,
+      globalSecurityScopes: this.globalSecurityScopes,
+      securityValues: this.securityValues,
+      securityRequirementIndex: this.securityRequirementIndex,
+    };
+  }
+
+  private applySourceSnapshot(snapshot: SourceSnapshot): void {
+    this.metadata = snapshot.metadata ?? null;
+    this.selectedKey = snapshot.selectedKey ?? '';
+    this.currentSpecKey = snapshot.currentSpecKey ?? '';
+    this.openControllers = snapshot.openControllers ?? {};
+    this.pathParams = snapshot.pathParams ?? {};
+    this.queryParams = snapshot.queryParams ?? {};
+    this.headerParams = snapshot.headerParams ?? {};
+    this.requestBody = snapshot.requestBody ?? '';
+    this.requestContentTypeSelections = snapshot.requestContentTypeSelections ?? {};
+    this.requestBodiesByContentType = snapshot.requestBodiesByContentType ?? {};
+    this.response = snapshot.response ?? {};
+    this.responseHistory = snapshot.responseHistory ?? [];
+    this.responseHistoryBySpec = snapshot.responseHistoryBySpec ?? {};
+    this.headerDraft = snapshot.headerDraft ?? {};
+    this.headerMappingDraft = snapshot.headerMappingDraft ?? [];
+    this.headerVariables = snapshot.headerVariables ?? {};
+    this.serverDraft = snapshot.serverDraft ?? getDefaultServerDraft();
+    this.metadataServerVariables = snapshot.metadataServerVariables ?? {};
+    this.activeServerKey = snapshot.activeServerKey ?? '';
+    this.activeServerUrl = snapshot.activeServerUrl ?? getDefaultServerUrl();
+    this.loadUrl = snapshot.loadUrl ?? getOpenapiUrl();
+    this.loadedFromPaste = snapshot.loadedFromPaste ?? false;
+    this.metadataDraft = snapshot.metadataDraft ?? '';
+    this.sourceDraftKey = snapshot.sourceDraftKey ?? '';
+    this.sourceDraftType = snapshot.sourceDraftType ?? 'url';
+    this.sourceDraftValue = snapshot.sourceDraftValue ?? '';
+    this.globalSecurityValues = snapshot.globalSecurityValues ?? {};
+    this.globalSecurityScopes = snapshot.globalSecurityScopes ?? {};
+    this.securityValues = snapshot.securityValues ?? {};
+    this.securityRequirementIndex = snapshot.securityRequirementIndex ?? {};
+
+    this.setGlobalHeaders(this.buildHeadersFromDraft(this.headerDraft));
+    this.setActiveServerUrl(this.activeServerUrl);
+  }
+
+  private setupPersistenceReactions(): void {
+    reaction(
+      () => this.buildMetaSnapshot(),
+      (meta) => {
+        void saveMeta(meta);
+      },
+      { delay: 200 }
+    );
+
+    reaction(
+      () => ({
+        key: this.selectedSourceKey,
+        snapshot: this.buildSourceSnapshot(),
+      }),
+      ({ key, snapshot }) => {
+        if (key && snapshot) {
+          void saveSource(key, snapshot);
         }
-      })
-      .catch(() => {});
+      },
+      { delay: 200 }
+    );
+  }
+
+  private async hydrate(): Promise<void> {
+    const meta = (await loadMeta()) ?? {
+      savedSources: {},
+      selectedSourceKey: '',
+      darkMode: false,
+    };
+
+    runInAction(() => {
+      this.savedSources = meta.savedSources ?? {};
+      this.selectedSourceKey = meta.selectedSourceKey ?? '';
+      this.darkMode = Boolean(meta.darkMode);
+      if (typeof document !== 'undefined') {
+        if (this.darkMode) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      }
+    });
+
+    // Default source bootstrap using VITE_OPENAPI_URL when no sources exist
+    const defaultUrl = getOpenapiUrl();
+    if (defaultUrl && Object.keys(this.savedSources).length === 0) {
+      runInAction(() => {
+        this.savedSources = {
+          default: { type: 'url', value: defaultUrl },
+        };
+        this.selectedSourceKey = 'default';
+      });
+    }
+
+    if (this.pendingSourceDeletions.size > 0) {
+      const keys = Array.from(this.pendingSourceDeletions);
+      this.pendingSourceDeletions.clear();
+      for (const key of keys) {
+        await this.applySourceDeletion(key);
+      }
+    }
+
+    if (this.selectedSourceKey) {
+      const snapshot = await loadSource<SourceSnapshot>(this.selectedSourceKey);
+      if (snapshot) {
+        runInAction(() => {
+          this.applySourceSnapshot(snapshot);
+        });
+      } else {
+        // If no snapshot, try loading from saved source definition
+        const entry = this.savedSources[this.selectedSourceKey];
+        if (entry) {
+          if (entry.type === 'url') {
+            this.loadedFromPaste = false;
+            this.loadUrl = entry.value;
+            await this.loadMetadata();
+          } else {
+            this.metadataDraft = entry.value;
+            this.loadedFromPaste = true;
+            await this.loadMetadataFromText(entry.value);
+          }
+        } else {
+          runInAction(() => {
+            this.resetSourceState();
+            this.selectedSourceKey = '';
+          });
+        }
+      }
+    } else {
+      runInAction(() => {
+        this.resetSourceState();
+      });
+    }
+
+    runInAction(() => {
+      this.isHydrated = true;
+    });
+
+    this.setupPersistenceReactions();
   }
 
   // ========================================================================
@@ -2261,69 +2451,88 @@ export class ApiStore {
     }
   }
 
-  removeSavedSource(key: string): void {
+  private async applySourceDeletion(key: string): Promise<void> {
     if (!key) {
       return;
     }
-    // Delete from savedSources
-    const next = { ...this.savedSources };
-    delete next[key];
-    this.savedSources = next;
+    runInAction(() => {
+      // Delete from savedSources
+      const next = { ...this.savedSources };
+      delete next[key];
+      this.savedSources = next;
 
-    // Delete all stored data related to this source
-    const specKey = `source:${key}`;
+      // Delete all stored data related to this source
+      const specKey = `source:${key}`;
 
-    // Delete history for this source from responseHistoryBySpec
-    if (this.responseHistoryBySpec[specKey]) {
-      const nextHistory = { ...this.responseHistoryBySpec };
-      delete nextHistory[specKey];
-      this.responseHistoryBySpec = nextHistory;
-    }
-
-    // Initialize all related data if current specKey is the deleted source
-    if (this.currentSpecKey === specKey) {
-      this.currentSpecKey = '';
-      this.responseHistory = [];
-
-      // Initialize if selected source is deleted
-      if (this.selectedSourceKey === key) {
-        this.selectedSourceKey = '';
+      // Delete history for this source from responseHistoryBySpec
+      if (this.responseHistoryBySpec[specKey]) {
+        const nextHistory = { ...this.responseHistoryBySpec };
+        delete nextHistory[specKey];
+        this.responseHistoryBySpec = nextHistory;
       }
 
-      // Initialize metadata
-      this.metadata = null;
-      this.selectedKey = '';
+      // Initialize all related data if current specKey is the deleted source
+      if (this.currentSpecKey === specKey) {
+        this.currentSpecKey = '';
+        this.responseHistory = [];
 
-      // Initialize request parameters and body
-      this.pathParams = {};
-      this.queryParams = {};
-      this.headerParams = {};
-      this.requestBody = '';
-      this.requestContentTypeSelections = {};
-      this.requestBodiesByContentType = {};
+        // Initialize if selected source is deleted
+        if (this.selectedSourceKey === key) {
+          this.selectedSourceKey = '';
+        }
 
-      // Initialize security-related data (stored per API, so only current API's data is initialized)
-      // securityValues and securityRequirementIndex are based on selectedKey
-      // so they are automatically affected when selectedKey is initialized
+        // Initialize metadata
+        this.metadata = null;
+        this.selectedKey = '';
 
-      // Initialize response
-      this.response = {};
+        // Initialize UI/selection state
+        this.openControllers = {};
 
-      // Initialize server-related data
-      this.metadataServerVariables = {};
-      this.activeServerKey = '';
-      this.activeServerUrl = getDefaultServerUrl();
+        // Initialize request parameters and body
+        this.pathParams = {};
+        this.queryParams = {};
+        this.headerParams = {};
+        this.requestBody = '';
+        this.requestContentTypeSelections = {};
+        this.requestBodiesByContentType = {};
 
-      // Initialize source-related data
-      this.loadUrl = getOpenapiUrl();
-      this.loadedFromPaste = false;
-      this.metadataDraft = '';
-    } else {
-      // Initialize only if selected source is deleted
-      if (this.selectedSourceKey === key) {
+        // Initialize security-related selections
+        this.securityValues = {};
+        this.securityRequirementIndex = {};
+
+        // Initialize response
+        this.response = {};
+
+        // Initialize server-related data
+        this.metadataServerVariables = {};
+        this.activeServerKey = '';
+        this.activeServerUrl = getDefaultServerUrl();
+
+        // Initialize source-related data
+        this.loadUrl = getOpenapiUrl();
+        this.loadedFromPaste = false;
+        this.metadataDraft = '';
+        this.sourceDraftKey = '';
+        this.sourceDraftType = 'url';
+        this.sourceDraftValue = '';
+      } else if (this.selectedSourceKey === key) {
+        // Initialize only if selected source is deleted
         this.selectedSourceKey = '';
       }
+    });
+
+    await deleteSource(key);
+  }
+
+  async removeSavedSource(key: string): Promise<void> {
+    if (!key) {
+      return;
     }
+    if (!this.isHydrated) {
+      this.pendingSourceDeletions.add(key);
+      return;
+    }
+    await this.applySourceDeletion(key);
   }
 
   async loadSavedSource(key: string): Promise<void> {
@@ -2331,16 +2540,32 @@ export class ApiStore {
     if (!entry) {
       return;
     }
-    this.selectedSourceKey = key;
-    this.currentSpecKey = `source:${key}`;
-    this.responseHistory =
-      this.responseHistoryBySpec[this.currentSpecKey] ?? [];
+
+    await this.persistReady;
+
+    const snapshot = await loadSource<SourceSnapshot>(key);
+    if (snapshot) {
+      runInAction(() => {
+        this.selectedSourceKey = key;
+        this.applySourceSnapshot(snapshot);
+      });
+      return;
+    }
+
+    runInAction(() => {
+      this.selectedSourceKey = key;
+      this.currentSpecKey = `source:${key}`;
+      this.responseHistory = [];
+      this.responseHistoryBySpec = {};
+    });
+
     if (entry.type === 'url') {
       this.loadedFromPaste = false;
       this.loadUrl = entry.value;
       await this.loadMetadata();
       return;
     }
+
     this.metadataDraft = entry.value;
     this.loadedFromPaste = true;
     await this.loadMetadataFromText(entry.value);

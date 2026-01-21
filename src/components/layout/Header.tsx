@@ -14,7 +14,7 @@ type HeaderViewProps = {
   darkMode: boolean;
   onOpenInfo: () => void;
   onOpenSource: () => void;
-  onRemoveSource: () => void;
+  onRemoveSource: () => void | Promise<void>;
   onSelectSource: (key: string) => void;
   onCancelLoad: () => void;
   onOpenServers: () => void;

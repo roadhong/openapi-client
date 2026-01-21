@@ -19,6 +19,7 @@
     "@uiw/react-codemirror": "^4.25.4",
     "axios": "^1.13.2",
     "codemirror-json5": "^1.0.3",
+    "idb-keyval": "^6.2.2",
     "json5": "^2.2.3",
     "mobx": "^6.15.0",
     "mobx-persist-store": "^1.1.8",
